@@ -1,0 +1,11 @@
+{
+    "files.associations": {
+        "accum": "raw",
+        "cstring": "cpp",
+        "array": "cpp",
+        "*.tcc": "cpp",
+        "deque": "cpp",
+        "vector": "cpp",
+        "iostream": "cpp"
+    }
+}

@@ -1,0 +1,3 @@
+C:/Users/lande/Documents/personal/0xChess/build/CMakeFiles/0xChess.dir
+C:/Users/lande/Documents/personal/0xChess/build/CMakeFiles/edit_cache.dir
+C:/Users/lande/Documents/personal/0xChess/build/CMakeFiles/rebuild_cache.dir
