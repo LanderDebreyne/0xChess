@@ -50,7 +50,59 @@ u64 attacked(const Position &pos, const int sq, const int them = true) {
            (king(sq, 0) & pos.colour[them] & pos.pieces[King]);
 }
 
+inline constexpr u64 square(const Position &pos, u64 sq){
+    return pos.flipped ? flip(sq) : sq;
+}
+
 u64 makemove(Position &pos, const Move &move) {
+    const int piece = piece_on(pos, move.from);
+    const int captured = piece_on(pos, move.to);
+    const u64 to = 1ULL<<move.to;
+    const u64 from = 1ULL<<move.from;
+    const int ally = pos.flipped ? 1 : 0;
+    const int enemy = pos.flipped ? 0 : 1;
+    const int hf = lsb(square(pos, from));
+    const int ht = lsb(square(pos, to));
+    pos.hash ^= get_key(piece, ally, hf) ^ get_key(piece, ally , ht);
+    pos.colour[0] ^= from | to;
+    pos.pieces[piece] ^= from | to;
+    if (piece == Pawn && to == pos.ep) {
+        pos.hash ^= get_key(Pawn, enemy, hf) ^ get_key(Pawn, enemy, ht);
+        pos.colour[1] ^= to >> 8;
+        pos.pieces[Pawn] ^= to >> 8;
+    }
+    // TODO update hash for ep
+    pos.hash ^= keys[768+lsb(pos.flipped ? flip(pos.ep) : pos.ep)];
+    pos.ep = (piece == Pawn && move.to - move.from == 16) ? to>>8 :  0x0ULL;
+    pos.hash ^= keys[768+lsb(pos.flipped ? flip(pos.ep) : pos.ep)];
+    if (captured != None) {
+        pos.hash ^= get_key(captured, enemy, ht);
+        pos.colour[1] ^= to;
+        pos.pieces[captured] ^= to;
+    }
+    if (piece == King) {
+        const u64 rook = move.to-move.from==2 ? 0xa0ULL : move.to-move.from==-2 ? 0x9ULL : 0x0ULL;
+        pos.hash ^= get_key(Rook, ally, lsb(pos.flipped ? flip(rook) : rook));
+        pos.colour[0] ^= rook;
+        pos.pieces[Rook] ^= rook;
+    }
+    if (piece == Pawn && move.to >= 56) {
+        pos.hash ^= get_key(Pawn, ally, ht) ^ get_key(move.promo, ally, ht);
+        pos.pieces[Pawn] ^= to;
+        pos.pieces[move.promo] ^= to;
+    }
+    pos.hash ^= keys[832 + (pos.castling[0]|pos.castling[1]<<1|pos.castling[2]<<2|pos.castling[3]<<3)];
+    pos.castling[0] &= !((from | to) & 0x90ULL);
+    pos.castling[1] &= !((from | to) & 0x11ULL);
+    pos.castling[2] &= !((from | to) & 0x9000000000000000ULL);
+    pos.castling[3] &= !((from | to) & 0x1100000000000000ULL);
+    pos.hash ^= keys[832 + (pos.castling[0]|pos.castling[1]<<1|pos.castling[2]<<2|pos.castling[3]<<3)];
+    flipPos(pos);
+    return !attacked(pos, lsb(pos.colour[1] & pos.pieces[King]), false);
+}
+
+//TODO: update hash
+u64 unmakemove(Position &pos, const Move &move) {
     const int piece = piece_on(pos, move.from);
     const int captured = piece_on(pos, move.to);
     const u64 to = 1ULL<<move.to;
@@ -82,6 +134,10 @@ u64 makemove(Position &pos, const Move &move) {
     flipPos(pos);
     return !attacked(pos, lsb(pos.colour[1] & pos.pieces[King]), false);
 }
+
+//TODO: 
+// makenull()
+// unmakenull()
 
 void add_move(Move *const movelist, int &num_moves, const int from, const int to, const int promo = None) {movelist[num_moves++] = Move{from, to, promo}; }
 

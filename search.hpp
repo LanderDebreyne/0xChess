@@ -2,14 +2,12 @@
 #include <cstring>
 #include <ctime>
 #include <iostream>
-#include <random>
 #include <string>
 #include <thread>
 #include <vector>
 #include <sstream>
 #include "position.hpp"
 #include "move.hpp"
-#include "hash.hpp"
 #include "movegen.hpp"
 #include "eval.hpp"
 
@@ -38,7 +36,7 @@ int search(Position &pos, int alpha, const int beta, int depth, const int ply, i
     stack[ply].score = static_eval;
     depth = in_check ? max(1, depth+1):depth;
     if (qsearch&&static_eval>alpha) {
-        if (static_eval >= beta) { return beta;}
+        if (static_eval >= beta) return beta;
         alpha = static_eval;
     }
     const u64 tt_key = get_hash(pos);
@@ -67,6 +65,7 @@ int search(Position &pos, int alpha, const int beta, int depth, const int ply, i
     TTE &tte = tt[tt_key%tt_size];
     Move tt_move{};
     // tt hit
+    // TODO: check pseudolegality
     if (tte.key == tt_key) {
         tt_move = tte.move;
         if (ply>0 && tte.depth >= depth) {
@@ -74,7 +73,7 @@ int search(Position &pos, int alpha, const int beta, int depth, const int ply, i
             if (tte.flag == 1 && tte.score <= alpha) {return tte.score; }
             if (tte.flag == 2 && tte.score >= beta) {return tte.score; }
         }
-    } else if (depth > 3) { depth--;}
+    } else if (depth>3) { depth--;} // TODO: check this
     // time
     if (stop || now() >= stop_time) { return 0;}
     auto &moves = stack[ply].moves;
@@ -101,24 +100,22 @@ int search(Position &pos, int alpha, const int beta, int depth, const int ply, i
         const auto best_move_score = move_scores[best_move_index];
         moves[best_move_index] = moves[i];
         move_scores[best_move_index] = move_scores[i];
-        // Delta pruning
-        if (qsearch && !in_check && static_eval + 50 + max_material[piece_on(pos, move.to)] < alpha) {
+        int pc_on = piece_on(pos, move.to);
+        int mm = max_material[pc_on];
+        // Delta + Forward futility  pruning
+        if ((qsearch && !in_check && static_eval + 50 + mm < alpha) || (!qsearch && !in_check && !(move==tt_move) && static_eval+150*depth+mm<alpha)) {
             best_score = alpha;
             break;
         }
-        // Forward futility pruning
-        if (!qsearch && !in_check && !(move==tt_move) && static_eval+150*depth+max_material[piece_on(pos, move.to)]<alpha) {
-            best_score = alpha;
-            break;
-        }
-        auto npos = pos;
+        // TODO: unmake
+        Position npos = pos;
         if (!makemove(npos, move)) continue;
         nodes++;
         int score;
         if (qsearch || !moves_evaluated) { full_window: score = -search(npos, -beta, -alpha, depth-1, ply+1, nodes, stop_time, stop, stack, hh_table, hash_history);} 
         else {
         // LMR
-        int reduction = depth>3 && moves_evaluated>3 && piece_on(pos, move.to) == None ? 1+moves_evaluated/16+depth/10+(alpha==beta-1)-improving : 0;
+        int reduction = depth>3 && moves_evaluated>3 && pc_on == None ? 1+moves_evaluated/16+depth/10+(alpha==beta-1)-improving : 0;
         zero_window:
             score = -search(npos, -alpha-1, -alpha, depth-reduction-1, ply+1, nodes, stop_time, stop, stack, hh_table, hash_history);
             if (reduction>0 && score>alpha) {
@@ -133,7 +130,7 @@ int search(Position &pos, int alpha, const int beta, int depth, const int ply, i
             return 0;
         }
         moves_evaluated++;
-        if (piece_on(pos, move.to) == None) quiet_moves_evaluated++;
+        if (pc_on == None) quiet_moves_evaluated++;
         if (score > best_score) {
             best_score = score;
             best_move = move;
@@ -148,8 +145,7 @@ int search(Position &pos, int alpha, const int beta, int depth, const int ply, i
         }
         if (alpha>=beta) {
             tt_flag = 2; 
-            const int capture = piece_on(pos, move.to);
-            if (capture == None) {
+            if (pc_on == None) {
                 hh_table[pos.flipped][move.from][move.to] += depth * depth;
                 stack[ply].killer = move;
             }
@@ -204,9 +200,9 @@ Move id(Position &pos, vector<u64> &hash_history, int thread_id, const int64_t s
         auto window = 40;
         auto research = 0;
     research:
-        const auto newscore = search(pos, score-window, score+window, i, 0, nodes, start_time + allocated_time, stop, stack, hh_table, hash_history);
+        const int newscore = search(pos, score-window, score+window, i, 0, nodes, start_time + allocated_time, stop, stack, hh_table, hash_history);
         // time
-        if (now()>=start_time+allocated_time || stop) { break;}
+        if (now()>=start_time+allocated_time || stop) break;
         if (thread_id == 0) {
             const int64_t elapsed = now() - start_time;
             cout << "info";
@@ -229,7 +225,7 @@ Move id(Position &pos, vector<u64> &hash_history, int thread_id, const int64_t s
             goto research;
         }
         score = newscore;
-        if (!research && now()>=start_time+allocated_time/10) { break;}
+        if (!research && now()>=start_time+allocated_time/10) break;
     }
     return stack[0].move;
 }
@@ -237,6 +233,7 @@ Move id(Position &pos, vector<u64> &hash_history, int thread_id, const int64_t s
 void set_fen(Position &pos, const string &fen) {
     if (fen == "startpos") {
         pos = Position();
+        pos.hash = get_hash(pos);
         return;
     }
     pos.colour = {};
@@ -272,4 +269,5 @@ void set_fen(Position &pos, const string &fen) {
         pos.ep = 1ULL << sq;
     }
     if (black) flipPos(pos);
+    pos.hash = get_hash(pos);
 }

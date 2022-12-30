@@ -6,6 +6,8 @@ int main( const int argc, const char **argv) {
     (void) argv;
     setbuf(stdout, 0);
     Position pos;
+    // TODO: not necessary?
+    //pos.hash = get_hash(pos);
     vector<u64> hash_history;
     Move moves[256];
     string command;
@@ -32,7 +34,11 @@ int main( const int argc, const char **argv) {
             const int64_t allocated_time = (pos.flipped ? btime : wtime) / 3;
             vector<thread> threads;
             vector<int> stops(thread_count, false);
-            for (int i=1; i<thread_count; ++i) { threads.emplace_back([=, &stops]() mutable { id(pos, hash_history, i, start, 1<<30, stops[i]);});}
+            // TODO: check pos copy for each thread
+            for (int i=1; i<thread_count; ++i) { 
+                Position t_pos = pos;
+                threads.emplace_back([=, &stops]() mutable { id(t_pos, hash_history, i, start, 1<<30, stops[i]);});
+            }
             const Move best_move = id(pos, hash_history, 0, start, allocated_time, stops[0]);
             // stop other threads
             for (int i=1; i<thread_count; ++i) { stops[i] = true;}
@@ -41,6 +47,7 @@ int main( const int argc, const char **argv) {
         } else if (command == "position") {
             // Set to startpos
             pos = Position();
+            pos.hash = get_hash(pos);
             hash_history.clear();
 
             string fen;
