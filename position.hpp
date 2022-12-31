@@ -26,10 +26,27 @@ struct Position {
                             0x1000000000000010ULL};
     u64 ep = 0x0ULL;
     int flipped = false;
-    u64 hash = 0x0ULL;
+    u64 hash;
+    Position(){
+        hash = 1;
+        u64 copy = colour[0]|colour[1];
+        while(copy) {
+            const int sq = lsb(copy);
+            copy &= copy-1;
+            const u64 pc = 1ULL<<sq;
+            int pt = None;
+            for (int i=0; i<6; ++i) {if(pieces[i] & pc){ pt = i; break;}}
+            hash ^= keys[(pt+6*((colour[0]>>sq)&1))*64+sq];
+        }
+        // En passant square
+        if (ep) {hash ^= keys[768+lsb(ep)];}
+        // Castling permissions
+        hash ^= keys[832 + (castling[0]|castling[1]<<1|castling[2]<<2|castling[3]<<3)];
+    }
+    
 };
 
-constexpr int piece_on(const Position &pos, const int sq) {
+inline constexpr int piece_on(const Position &pos, const int sq) {
     const u64 pc = 1ULL<<sq;
     for (int i=0; i<6; ++i) {if(pos.pieces[i] & pc){ return i;}}
     return None;
@@ -49,6 +66,21 @@ void flipPos(Position &pos) {
 
 // TODO: reduce using this
 u64 get_hash(const Position &pos) {
+    u64 hash = 1;
+    u64 copy = pos.colour[0]|pos.colour[1];
+    while(copy) {
+        const int sq = lsb(copy);
+        copy &= copy-1;
+        hash ^= keys[(piece_on(pos, sq)+6*((pos.colour[0]>>sq)&1))*64+sq];
+    }
+    // En passant square
+    if (pos.ep) {hash ^= keys[768+lsb(pos.ep)];}
+    // Castling permissions
+    hash ^= keys[832 + (pos.castling[0]|pos.castling[1]<<1|pos.castling[2]<<2|pos.castling[3]<<3)];
+    return hash;
+}
+
+/*u64 get_hash(const Position &pos) {
     u64 hash = pos.flipped;
     u64 copy = pos.colour[0]|pos.colour[1];
     while(copy) {
@@ -61,6 +93,6 @@ u64 get_hash(const Position &pos) {
     // Castling permissions
     hash ^= keys[832 + (pos.castling[0]|pos.castling[1]<<1|pos.castling[2]<<2|pos.castling[3]<<3)];
     return hash;
-}
+}*/
 
 inline constexpr u64 get_key(const int pc, const int ally, const int sq){ return keys[(pc+6*ally)*64+sq];}

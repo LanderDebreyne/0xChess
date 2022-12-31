@@ -6,8 +6,6 @@ int main( const int argc, const char **argv) {
     (void) argv;
     setbuf(stdout, 0);
     Position pos;
-    // TODO: not necessary?
-    //pos.hash = get_hash(pos);
     vector<u64> hash_history;
     Move moves[256];
     string command;
